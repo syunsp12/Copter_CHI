@@ -291,7 +291,7 @@ def process_and_execute_response(response_text, base_timestamp, current_record_f
                 angle = movement["angle"]
                 speed = movement["speed"]
                 if speed != 0:
-                    motor.run_for_degrees(angle, speed)
+                    #motor.run_for_degrees(angle, speed)
                     print(f"Motor moved {angle} degrees at speed {speed}")
                 else:
                     print(f"Speed is zero for angle {angle}, skipping...")
