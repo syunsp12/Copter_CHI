@@ -16,13 +16,12 @@ from buildhat import Motor
 import vertexai
 import vertexai.generative_models as genai
 
-
 # 一時保存フォルダのパス設定と作成
 temp_save_folder = "/home/pi/Desktop/temp"
 temp_video_folder = os.path.join(temp_save_folder, "Video")
 temp_audio_folder = os.path.join(temp_save_folder, "Audio")
 
-#ファイルがない場合新しく作成
+# ファイルがない場合新しく作成
 if not os.path.exists(temp_video_folder):
     os.makedirs(temp_video_folder)
 if not os.path.exists(temp_audio_folder):
@@ -42,10 +41,8 @@ motor = Motor("A")
 # モーターのリリースを有効化（停止後にモーターが固定されるように）
 motor.release = False
 
-# この行でstderrを/dev/nullにリダイレクトします(alsaのログを減らす)
+# この行でstderrを/dev/nullにリダイレクト (alsaのログを減らす)
 os.dup2(os.open(os.devnull, os.O_RDWR), 2)
-
-
 
 def record_video(duration=15):
     """
@@ -58,7 +55,6 @@ def record_video(duration=15):
         cap = cv2.VideoCapture(0)
         print("カメラの初期化が完了しました。")
         
-        # カメラが開けない場合のエラーハンドリング
         if not cap.isOpened():
             print("カメラが開けませんでした。")
             return None
@@ -67,11 +63,9 @@ def record_video(duration=15):
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-        # 録画の設定 (FourCC形式とフレームレートを指定)
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         output = cv2.VideoWriter(video_path, fourcc, 1.0, (640, 480)) 
         
-        # ビデオライターが開けない場合のエラーハンドリング
         if not output.isOpened():
             print("ビデオライターが開けませんでした。")
             cap.release()
@@ -80,8 +74,7 @@ def record_video(duration=15):
         start_time = time.time()
         frame_count = 0
         print("録画を開始します。")
-
-        # 指定された秒数間、フレームをキャプチャして保存
+        
         while (time.time() - start_time) < duration: 
             ret, frame = cap.read()
             
@@ -90,15 +83,12 @@ def record_video(duration=15):
                 break
             
             frame_count += 1
-
             output.write(frame)
-            cv2.imshow('Recording', frame)  # フレームをリアルタイムで表示
+            cv2.imshow('Recording', frame)
 
-            # 'q'キーが押されたら録画を中断
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-        # 録画の終了処理
         cap.release()
         output.release()
         cv2.destroyAllWindows()
@@ -108,7 +98,6 @@ def record_video(duration=15):
         print(f"録画エラー: {e}")
         return None
     
-
     return video_path
 
 def record_audio(duration=15, sample_rate=44100, chunk_size=1024):
@@ -120,28 +109,23 @@ def record_audio(duration=15, sample_rate=44100, chunk_size=1024):
         audio_format = pyaudio.paInt16 # 16ビット音声
         channels = 1  # モノラル録音
 
-        # PyAudioオブジェクトの初期化
         p = pyaudio.PyAudio()
 
-        # 音声ストリームのオープン
         stream = p.open(format=audio_format, channels=channels, rate=sample_rate, input=True, frames_per_buffer=chunk_size)
 
         print("録音を開始します。")
         frames = []
 
-        # 録音を開始し、フレームを蓄積
         for _ in range(0, int(sample_rate / chunk_size * duration)):
             data = stream.read(chunk_size)
             frames.append(data)
 
         print("録音を終了します。")
 
-        # ストリームの停止とクローズ
         stream.stop_stream()
         stream.close()
         p.terminate()
 
-        # 一時的にWAVファイルとして保存
         temp_wav_path = os.path.join(temp_audio_folder, "temp_wav_audio.wav")
         with wave.open(temp_wav_path, "wb") as wf:
             wf.setnchannels(channels)
@@ -149,16 +133,12 @@ def record_audio(duration=15, sample_rate=44100, chunk_size=1024):
             wf.setframerate(sample_rate)
             wf.writeframes(b"".join(frames))
 
-        # 一時的に生成されるMP3ファイルのパス
         temp_mp3_path = os.path.join(temp_audio_folder, "temp_mp3_audio.mp3")
 
-        # WAVファイルをMP3に変換して保存
         audio = AudioSegment.from_wav(temp_wav_path)
         audio.export(temp_mp3_path, format="mp3")
 
-        # 一時的なWAVファイルを削除
         os.remove(temp_wav_path)
-
 
     except Exception as e:
         print(f"録音エラー: {e}")
@@ -175,12 +155,11 @@ def record_video_audio_concurrently(duration=15):
         video_path = os.path.join(temp_video_folder, "temp_Video.mp4")
         audio_path = os.path.join(temp_audio_folder, "temp_mp3_audio.mp3")
         
-        # 録音処理を別スレッドで実行
         audio_thread = threading.Thread(target=record_audio, args=(duration,))
 
-        audio_thread.start() # 録音開始
-        record_video() # メインスレッドで録画実行
-        audio_thread.join() # 録音スレッドの終了を待機
+        audio_thread.start()
+        record_video()
+        audio_thread.join()
 
     except Exception as e:
         print(f"録画・録音の同時処理エラー: {e}")
@@ -197,9 +176,8 @@ def upload_and_prompt_video_audio(video_path, audio_path):
         video_part = genai.Part.from_data(open(video_path, "rb").read(), mime_type="video/mp4")
         audio_part = genai.Part.from_data(open(audio_path, "rb").read(), mime_type="audio/mp3")
 
-        # プロンプトの作成
-        prompt ="""
-            # 指示
+        prompt = """
+             # 指示
             あなたはraspberrypi上にモーターが接続され、モーターに可動部が接続されたプロダクト「コプター」です。
             あなたの性格をもとに、入力された環境下において動くコプターの動作パターンを生成してください。
             ※コプターはモーターに接続されているため回転以外の動作は行いません。そのためあなたの意図が、適切に回転動作に反映されるように工夫して動作パターンを出力してください。
@@ -265,35 +243,27 @@ def upload_and_prompt_video_audio(video_path, audio_path):
                 - このエージェントは、地道に努力を続けるタイプです。継続的に努力し、目標を達成するために必要な過程を大切にします。。    
         """
 
-        # GenerativeModelの選択
         model = genai.GenerativeModel(model_name="gemini-1.5-pro", generation_config={"response_mime_type": "application/json"})
 
-        # LLMリクエストの実行
         print("Geminiの応答を待っています...")
         response = model.generate_content([video_part, audio_part, prompt])
-        
 
-        # 出力結果を表示
         print(response.text)
 
     except Exception as e:
-            print(f"Gemini APIのエラー: {e}")
-            return None
+        print(f"Gemini APIのエラー: {e}")
+        return None
     return response.text
 
-def extract_motor_movements(response_text):
+def process_and_execute_response(response_text, base_timestamp, current_record_folder):
     """
-    APIレスポンスからモーターの動作指示を抽出します。
-    この関数では、angle と speed と second を数値型に変換します。
+    レスポンスの処理、モーターの動作、応答の記録、ファイルの移動を行う関数
     """
     try:
-        # レスポンスをJSON形式で読み込み
         response_json = json.loads(response_text)
-
-        # モーターの動作指示を抽出
+        
         motor_movements = response_json.get("motorMovements", [])
 
-        # angle, speed, secondを数値型に変換
         for movement in motor_movements:
             if "angle" in movement:
                 movement["angle"] = int(movement["angle"])
@@ -302,96 +272,65 @@ def extract_motor_movements(response_text):
             if "second" in movement:
                 movement["second"] = float(movement["second"])
 
-        # その他の解釈情報を抽出
         interpretation_Vison = response_json.get("interpretation_Vison", "")
         interpretation_Audio = response_json.get("interpretation_Audio", "")
         interpretation_Think = response_json.get("interpretation_Think", "")
+        
+        log_file_path = os.path.join(current_record_folder, f"log_{base_timestamp}.txt")
+        with open(log_file_path, "a") as log_file:
+            log_file.write(f"\nTime: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            log_file.write(f"Interpretation Vision: {interpretation_Vison}\n")
+            log_file.write(f"Interpretation Audio: {interpretation_Audio}\n")
+            log_file.write(f"Interpretation Think: {interpretation_Think}\n")
+            log_file.write(f"Motor Movements: {motor_movements}\n")
+            log_file.write("\n")
 
-        return motor_movements, interpretation_Vison, interpretation_Audio, interpretation_Think
+        for movement in motor_movements:
+            type = movement["type"]
+            if type == "run_for_degrees":
+                angle = movement["angle"]
+                speed = movement["speed"]
+                if speed != 0:
+                    motor.run_for_degrees(angle, speed)
+                    print(f"Motor moved {angle} degrees at speed {speed}")
+                else:
+                    print(f"Speed is zero for angle {angle}, skipping...")
+            elif type == "sleep":
+                second = movement["second"]
+                time.sleep(second)
+
+        iteration_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        final_video_path = os.path.join(current_record_folder, f"video_{iteration_timestamp}.mp4")
+        final_audio_path = os.path.join(current_record_folder, f"audio_{iteration_timestamp}.mp3")
+        
+        return final_video_path, final_audio_path
+
     except (KeyError, ValueError, IndexError, json.JSONDecodeError) as e:
-        print(f"Error extracting motor movements: {e}")
-        return [], "", "", ""
-
-
-def move_motor(angle, speed):
-    """
-    モーターを指定された角度とスピードで動作させます。
-    """
-    if speed == 0:
-        print(f"Speed is zero for angle {angle}, skipping...")
-        return
-
-    # モーターを動作させる
-    #motor.run_for_degrees(angle, speed)
-
-    # 動作結果を出力
-    print(f"Motor moved {angle} degrees at speed {speed}")
-
-
-
-def log_response(response_text, interpretation_Vison, interpretation_Audio, interpretation_Think, motor_movements, log_file_path):
-    """
-    APIの応答内容をログに記録する関数
-    """
-    with open(log_file_path, "a") as log_file:
-        log_file.write(f"\nTime: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        log_file.write(f"Interpretation Vision: {interpretation_Vison}\n")
-        log_file.write(f"Interpretation Audio: {interpretation_Audio}\n")
-        log_file.write(f"Interpretation Think: {interpretation_Think}\n")
-        log_file.write(f"Motor Movements: {motor_movements}\n")
-        log_file.write("\n")
-
+        print(f"Error processing response: {e}")
+        return None, None
 
 def main():
-    # タイムスタンプに基づいたフォルダ名を生成
     base_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     current_record_folder = os.path.join(record_save_folder, base_timestamp)
     os.makedirs(current_record_folder, exist_ok=True)
 
-    # ログファイルパスを設定
-    log_file_path = os.path.join(current_record_folder, f"log_{base_timestamp}.txt")
-
     while True:
         try:
-            # 並行してビデオとオーディオを録音
             video_path, audio_path = record_video_audio_concurrently(duration=15)
-            #録音・録画のエラーハンドリング
             if video_path is None or audio_path is None:
                 raise RuntimeError("録画または録音に失敗しました。")
 
-            # Videoをアップロードし、Google Gemini APIにプロンプトを送信
             response_text = upload_and_prompt_video_audio(video_path, audio_path)
-            #Gemini APIのエラーハンドリング
             if response_text is None:
-                    raise RuntimeError("Gemini APIの呼び出しに失敗しました。")
+                raise RuntimeError("Gemini APIの呼び出しに失敗しました。")
 
-            # モーターの動作指示を抽出
-            motor_movements, interpretation_Vison, interpretation_Audio, interpretation_Think = extract_motor_movements(response_text)
+            final_video_path, final_audio_path = process_and_execute_response(response_text, base_timestamp, current_record_folder)
 
-            for movement in motor_movements:
-                # 各動作指示に応じてモーターを動作させる
-                type = movement["type"]
+            if not final_video_path or not final_audio_path:
+                continue
 
-                if type == "run_for_degrees":
-                    angle = movement["angle"]
-                    speed = movement["speed"]
-                    move_motor(angle, speed)
-                elif type == "sleep":
-                    second = movement["second"]
-                    time.sleep(second)
-
-            # 応答と動作のログを記録
-            log_response(response_text, interpretation_Vison, interpretation_Audio, interpretation_Think, motor_movements, log_file_path)
-
-            # 各ファイルの保存時に個別のタイムスタンプを設定
-            iteration_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            final_video_path = os.path.join(current_record_folder, f"video_{iteration_timestamp}.mp4")
-            final_audio_path = os.path.join(current_record_folder, f"audio_{iteration_timestamp}.mp3")
             os.rename(video_path, final_video_path)
             os.rename(audio_path, final_audio_path)
-
-            # 次のループに進むまでに少し休止
-            time.sleep(10)
 
 
         except Exception as e:
