@@ -36,10 +36,10 @@ REGION = "asia-northeast1"
 vertexai.init(project=PROJECT_ID, location=REGION)
 
 # モーターの初期化（ポートを指定）
-motor = Motor("A")
+#motor = Motor("A")
 
 # モーターのリリースを有効化（停止後にモーターが固定されるように）
-motor.release = False
+#motor.release = False
 
 # この行でstderrを/dev/nullにリダイレクト (alsaのログを減らす)
 os.dup2(os.open(os.devnull, os.O_RDWR), 2)
