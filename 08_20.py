@@ -62,7 +62,7 @@ manager = multiprocessing.Manager()
 gemini_response = manager.dict()
 motor_response = manager.dict()
 
-duration = 20
+
 
 
 
@@ -103,6 +103,7 @@ def record_video(duration,result_list=None):
 
             output.write(frame)
             cv2.imshow('Recording', frame)  # フレームをリアルタイムで表示
+            cv2.waitKey(1)
 
 
         # 録画の終了処理
@@ -406,16 +407,19 @@ def main():
     base_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     current_record_folder = os.path.join(record_save_folder, base_timestamp)
     os.makedirs(current_record_folder, exist_ok=True)
+
+    #録画録音時間の設定
+    duration = 5
     
     # 初回の録音録画を実行
-    last_video_path, last_audio_path = record_video_audio_concurrently()
+    last_video_path, last_audio_path = record_video_audio_concurrently(duration)
     print("video and audio path: ", last_video_path, last_audio_path)
 
 
     # 2回目の録音録画とGemini API処理を実行
     gemini_process = multiprocessing.Process(target=process_gemini, args=(last_video_path, last_audio_path, gemini_response))
     gemini_process.start()
-    last_video_path, last_audio_path = record_video_audio_concurrently()
+    last_video_path, last_audio_path = record_video_audio_concurrently(duration)
     gemini_process.join()
 
     print("video and audio path: ", last_video_path, last_audio_path)
@@ -424,13 +428,15 @@ def main():
     while True:
         try:
             # 3回目の録音録画とGemini API処理を実行
-            gemini_process = multiprocessing.Process(target=process_gemini, args=(last_video_path, last_audio_path, gemini_response))
-            gemini_process.start()
             motor_and_log_process = multiprocessing.Process(target=process_motor_and_log, args=(gemini_response["responseText"], last_video_path, last_audio_path, current_record_folder))
             motor_and_log_process.start()
+            gemini_process = multiprocessing.Process(target=process_gemini, args=(last_video_path, last_audio_path, gemini_response))
+            gemini_process.start()
             time.sleep(2)
-            last_video_path, last_audio_path = record_video_audio_concurrently()
+            last_video_path, last_audio_path = record_video_audio_concurrently(duration)
+            print("video and audio path: ", last_video_path, last_audio_path)
             gemini_process.join()
+            print("Gemini Response: ", gemini_response["responseText"])
             motor_and_log_process.join()
 
         except Exception as e:
