@@ -62,7 +62,7 @@ manager = multiprocessing.Manager()
 gemini_response = manager.dict()
 motor_response = manager.dict()
 
-
+NotRecord_path = "path"
 
 
 
@@ -432,6 +432,16 @@ def main():
             motor_and_log_process.start()
             gemini_process = multiprocessing.Process(target=process_gemini, args=(last_video_path, last_audio_path, gemini_response))
             gemini_process.start()
+
+            # 常にカメラの映像を試みて取得して表示
+            ret, frame = cap.read()
+            if ret:
+                cv2.imshow("Record", frame)
+            else:
+                cv2.imshow("Record", dummy_image)
+            
+            cv2.waitKey(1)
+
             time.sleep(2)
             last_video_path, last_audio_path = record_video_audio_concurrently(duration)
             print("video and audio path: ", last_video_path, last_audio_path)
