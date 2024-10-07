@@ -38,10 +38,10 @@ REGION = "asia-northeast1"
 vertexai.init(project=PROJECT_ID, location=REGION)
 
 # モーターの初期化（ポートを指定）
-#motor = Motor("A")
+motor = Motor("A")
 
 # モーターのリリースを有効化（停止後にモーターが固定されるように）
-#motor.release = False
+motor.release = False
 
 # この行でstderrを/dev/nullにリダイレクトします(alsaのログを減らす)
 os.dup2(os.open(os.devnull, os.O_RDWR), 2)
@@ -66,16 +66,18 @@ NotRecord_path = "path"
 
 
 
-def record_video(duration,result_list=None):
+def record_video_audio(duration, sample_rate=44100, chunk_size=1024):
     """
-    指定された秒数間、カメラで録画を行い、保存したファイルのパスを返します。
+    指定された秒数間、カメラで録画を行い、音声を同時に録音します。
+    終了後、ビデオとオーディオの保存されたファイルパスを返します。
     """
     try:
-    
         # タイムスタンプ付きのファイル名を生成
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         video_path = os.path.join(temp_video_folder, f"temp_Video_{timestamp}.mp4")
-    
+        audio_path = os.path.join(temp_audio_folder, f"temp_mp3_audio_{timestamp}.mp3")
+        temp_wav_path = os.path.join(temp_audio_folder, f"temp_wav_audio_{timestamp}.wav")
+        
         # 録画の設定 (FourCC形式とフレームレートを指定)
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         output = cv2.VideoWriter(video_path, fourcc, 1.0, (640, 480)) 
@@ -84,14 +86,22 @@ def record_video(duration,result_list=None):
         if not output.isOpened():
             print("ビデオライターが開けませんでした。")
             cap.release()
-            return None
+            return None, None
+            
+        # PyAudioオブジェクトの初期化
+        p = pyaudio.PyAudio()
+        audio_format = pyaudio.paInt16  # 16ビット音声
+        channels = 1  # モノラル録音
+
+        # 音声ストリームのオープン
+        stream = p.open(format=audio_format, channels=channels, rate=sample_rate, input=True, frames_per_buffer=chunk_size)
+
+        print("録画と録音を開始します。")
+        frames = []
 
         start_time = time.time()
-        frame_count = 0
-        print("録画を開始します。")
-        
 
-        # 指定された秒数間、フレームをキャプチャして保存
+        # 指定された秒数間、フレームと音声データをキャプチャして保存
         while (time.time() - start_time) < duration: 
             ret, frame = cap.read()
             
@@ -99,61 +109,25 @@ def record_video(duration,result_list=None):
                 print("フレームの読み込みに失敗しました。")
                 break
             
-            frame_count += 1
-
             output.write(frame)
             cv2.imshow('Recording', frame)  # フレームをリアルタイムで表示
             cv2.waitKey(1)
 
-
-        # 録画の終了処理
-        output.release()
-        cv2.destroyAllWindows()
-        print("録画を終了します。")
-        
-        # 結果リストに動画パスを追加
-        if result_list is not None:
-            result_list.append(video_path)
-
-    except Exception as e:
-        print(f"録画エラー: {e}")
-        return None
-    
-
-    return video_path
-
-def record_audio(duration, sample_rate=44100, chunk_size=1024,result_list=None):
-    """
-    指定された秒数間、音声を録音し、MP3形式に変換して保存します。
-    保存したファイルのパスを返します。
-    """
-    try:
-        audio_format = pyaudio.paInt16 # 16ビット音声
-        channels = 1  # モノラル録音
-
-        # PyAudioオブジェクトの初期化
-        p = pyaudio.PyAudio()
-
-        # 音声ストリームのオープン
-        stream = p.open(format=audio_format, channels=channels, rate=sample_rate, input=True, frames_per_buffer=chunk_size)
-
-        print("録音を開始します。")
-        frames = []
-
-        # 録音を開始し、フレームを蓄積
-        for _ in range(0, int(sample_rate / chunk_size * duration)):
             data = stream.read(chunk_size)
             frames.append(data)
 
-        print("録音を終了します。")
+        print("録画と録音を終了します。")
 
         # ストリームの停止とクローズ
         stream.stop_stream()
         stream.close()
         p.terminate()
 
+        # 録画の終了処理
+        output.release()
+        cv2.destroyAllWindows()
+
         # 一時的にWAVファイルとして保存
-        temp_wav_path = os.path.join(temp_audio_folder, "temp_wav_audio.wav")
         with wave.open(temp_wav_path, "wb") as wf:
             wf.setnchannels(channels)
             wf.setsampwidth(p.get_sample_size(audio_format))
@@ -162,32 +136,21 @@ def record_audio(duration, sample_rate=44100, chunk_size=1024,result_list=None):
             
         # 一時的にWAVファイルとして保存した後、音量を調整
         audio = AudioSegment.from_wav(temp_wav_path)
-            
+
         # 全体の音量を一括で6dB上げる
         audio = audio + 6
 
-        # 一時的に生成されるMP3ファイルのパス
-        temp_mp3_path = os.path.join(temp_audio_folder, "temp_mp3_audio.mp3")
-        
         # WAVファイルをMP3に変換して保存
-        audio.export(temp_mp3_path, format="mp3")
-       
+        audio.export(audio_path, format="mp3")
 
         # 一時的なWAVファイルを削除
         os.remove(temp_wav_path)
         
-        # 結果リストに音声パスを追加
-        if result_list is not None:
-            result_list.append(temp_mp3_path)
-
-
     except Exception as e:
-        print(f"録音エラー: {e}")
-        return None
+        print(f"録画・録音エラー: {e}")
+        return None, None
 
-    return temp_mp3_path
-
-def record_video_audio_concurrently(duration):
+    return video_path, audio_path
     """
     録画と録音を並行して実行します。
     終了後、ビデオとオーディオの保存パスを返します。
@@ -313,7 +276,7 @@ def upload_and_prompt_video_audio(video_path, audio_path):
             return None
     return response.text
 
-def extract_motor_movements(response_text):
+
     """
     APIレスポンスからモーターの動作指示を抽出します。
     この関数では、angle と speed と second を数値型に変換します。
@@ -344,7 +307,7 @@ def extract_motor_movements(response_text):
         print(f"Error extracting motor movements: {e}")
         return [], "", "", ""
 
-def move_motor(angle, speed):
+
     """
     モーターを指定された角度とスピードで動作させます。
     """
@@ -352,13 +315,13 @@ def move_motor(angle, speed):
         print(f"Speed is zero for angle {angle}, skipping...")
         return
 
-    # モーターを動作させる
-    #motor.run_for_degrees(angle, speed)
+    #モーターを動作させる
+    motor.run_for_degrees(angle, speed)
 
     # 動作結果を出力
     print(f"Motor moved {angle} degrees at speed {speed}")
 
-def log_response(response_text, interpretation_Vison, interpretation_Audio, interpretation_Think, motor_movements, log_file_path):
+
     """
     APIの応答内容をログに記録する関数
     """
@@ -374,24 +337,59 @@ def process_motor_and_log(response_text, video_path, audio_path, current_record_
     """
     Geminiのレスポンスを基にモーターを制御し、動作をログに記録し、ファイルを保存します。
     """
-    # モーター動作指示を抽出し、応答の解釈も取り出します
-    motor_movements, interpretation_Vison, interpretation_Audio, interpretation_Think = extract_motor_movements(response_text)
+    try:
+        # レスポンスをJSON形式で読み込む
+        response_json = json.loads(response_text)
 
-    # モーターの動作を実行
-    for movement in motor_movements:
-        type = movement["type"]
+        # モーターの動作指示を抽出
+        motor_movements = response_json.get("motorMovements", [])
 
-        if type == "run_for_degrees":
-            angle = movement["angle"]
-            speed = movement["speed"]
-            move_motor(angle, speed)
-        elif type == "sleep":
-            second = movement["second"]
-            time.sleep(second)
+        # angle, speed, secondを数値型に変換
+        for movement in motor_movements:
+            if "angle" in movement:
+                movement["angle"] = int(movement["angle"])
+            if "speed" in movement:
+                movement["speed"] = int(movement["speed"])
+            if "second" in movement:
+                movement["second"] = float(movement["second"])
 
-    # 応答と動作の詳細をログに記録
-    log_file_path = os.path.join(current_record_folder, "log.txt")
-    log_response(response_text, interpretation_Vison, interpretation_Audio, interpretation_Think, motor_movements, log_file_path)
+        # その他の解釈情報を抽出
+        interpretation_Vison = response_json.get("interpretation_Vison", "")
+        interpretation_Audio = response_json.get("interpretation_Audio", "")
+        interpretation_Think = response_json.get("interpretation_Think", "")
+
+        # モーターの動作を実行
+        for movement in motor_movements:
+            type = movement["type"]
+
+            if type == "run_for_degrees":
+                angle = movement["angle"]
+                speed = movement["speed"]
+                if speed == 0:
+                    print(f"Speed is zero for angle {angle}, skipping...")
+                    continue
+                motor.run_for_degrees(angle, speed)
+                print(f"Motor moved {angle} degrees at speed {speed}")
+            elif type == "sleep":
+                second = movement["second"]
+                print(f"Motor sleeping {second}sec now ")
+                time.sleep(second)
+
+
+            
+
+        # 応答と動作の詳細をログに記録
+        log_file_path = os.path.join(current_record_folder, "log.txt")
+        with open(log_file_path, "a") as log_file:
+            log_file.write(f"\nTime: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            log_file.write(f"Interpretation Vision: {interpretation_Vison}\n")
+            log_file.write(f"Interpretation Audio: {interpretation_Audio}\n")
+            log_file.write(f"Interpretation Think: {interpretation_Think}\n")
+            log_file.write(f"Motor Movements: {motor_movements}\n")
+            log_file.write("\n")
+
+    except (KeyError, ValueError, IndexError, json.JSONDecodeError) as e:
+        print(f"モーター動作の抽出またはログ記録中のエラー: {e}")
 
 def process_gemini(video_path, audio_path, result):
     """
@@ -412,14 +410,14 @@ def main():
     duration = 5
     
     # 初回の録音録画を実行
-    last_video_path, last_audio_path = record_video_audio_concurrently(duration)
+    last_video_path, last_audio_path = record_video_audio(duration)
     print("video and audio path: ", last_video_path, last_audio_path)
 
 
     # 2回目の録音録画とGemini API処理を実行
     gemini_process = multiprocessing.Process(target=process_gemini, args=(last_video_path, last_audio_path, gemini_response))
     gemini_process.start()
-    last_video_path, last_audio_path = record_video_audio_concurrently(duration)
+    last_video_path, last_audio_path = record_video_audio(duration)
     gemini_process.join()
 
     print("video and audio path: ", last_video_path, last_audio_path)
@@ -443,7 +441,7 @@ def main():
             cv2.waitKey(1)
 
             time.sleep(2)
-            last_video_path, last_audio_path = record_video_audio_concurrently(duration)
+            last_video_path, last_audio_path = record_video_audio(duration)
             print("video and audio path: ", last_video_path, last_audio_path)
             gemini_process.join()
             print("Gemini Response: ", gemini_response["responseText"])
