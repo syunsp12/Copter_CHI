@@ -61,7 +61,6 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 manager = multiprocessing.Manager()
 shared_data = manager.dict() # Manager.dict() を使って共有辞書を作成
 
-
 def record(duration):
     """
     指定された秒数間、カメラで録画を行い、音声を同時に録音します。
@@ -164,7 +163,7 @@ def Gemini(video_path, audio_path, shared_data):
         prompt = """
         # 指示
         あなたはraspberrypi上にモーターが接続され、モーターに可動部が接続されたプロダクト「コプター」です。
-        
+        あなたはヘッドマウントガジェットです。具体的には、ヘルメットの上にモーターが取り付けられておりその中で回転します。
         あなたの性格をもとに、入力された環境下において動くコプターの動作パターンを生成してください。
         ※コプターはモーターに接続されているため回転以外の動作は行いません。そのためあなたの意図が、適切に回転動作に反映されるように工夫して動作パターンを出力してください。
 
@@ -228,10 +227,12 @@ def Gemini(video_path, audio_path, shared_data):
         - このエージェントは、地道に努力を続けるタイプです。継続的に努力し、目標を達成するために必要な過程を大切にします。。
         """
 
-        model = genai.GenerativeModel(model_name="gemini-1.5-pro", generation_config={"response_mime_type": "application/json"})
+        model = genai.GenerativeModel(model_name="gemini-1.5-pro", 
+                                      generation_config={"response_mime_type": "application/json"},
+                                      system_instruction = prompt)
 
         print("Geminiの応答を待っています...")
-        response = model.generate_content([video_part, audio_part, prompt])
+        response = model.generate_content([video_part, audio_part])
 
         # Geminiからのレスポンスを辞書として格納
         shared_data["gemini_response"] = json.loads(response.text)
@@ -317,7 +318,7 @@ def main():
 
     # 1回目の録音録画を実行
     last_video_path, last_audio_path = record(duration)
-    print("video and audio path: ", last_video_path, last_audio_path)
+    print("Gemini done. Response: ", shared_data["gemini_response"])
 
 
     # 2回目の録音録画と1回目のGemini API処理を実行
@@ -326,8 +327,8 @@ def main():
     last_video_path, last_audio_path = record(duration)
     gemini_process.join()
 
-    print("video and audio path: ", last_video_path, last_audio_path)
-    print("Gemini Response: ", shared_data["gemini_response"])
+    print("Gemini done. Response: ", shared_data["gemini_response"])
+    print("Record done.  path: ", last_video_path, last_audio_path)
 
 
     while True:
@@ -342,8 +343,8 @@ def main():
 
             log_process.join()
             gemini_process.join()
-            print("video and audio path: ", last_video_path, last_audio_path)
-            print("Gemini Response: ", shared_data["gemini_response"])
+            print("Gemini done. Response: ", shared_data["gemini_response"])
+            print("Record done.  path: ", last_video_path, last_audio_path)
 
         except Exception as e:
             print(f"メインループエラー: {e}")
