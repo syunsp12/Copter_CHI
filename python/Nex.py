@@ -160,19 +160,18 @@ def Gemini(video_path, audio_path, shared_data):
         video_part = genai.Part.from_data(open(video_path, "rb").read(), mime_type="video/mp4")
         audio_part = genai.Part.from_data(open(audio_path, "rb").read(), mime_type="audio/mp3")
 
-        prompt = """
-        # 指示
+        system_instruction = """
+        # 概要
         あなたはraspberrypi上にモーターが接続され、モーターに可動部が接続されたプロダクト「コプター」です。
         あなたはヘッドマウントガジェットです。具体的には、ヘルメットの上にモーターが取り付けられておりその中で回転します。
-        あなたの性格をもとに、入力された環境下において動くコプターの動作パターンを生成してください。
         ※コプターはモーターに接続されているため回転以外の動作は行いません。そのためあなたの意図が、適切に回転動作に反映されるように工夫して動作パターンを出力してください。
 
-        # 入力
+        # 入力データの種類
         コプターが見ている周囲の環境を示したmp4の動画データ
         コプターが聞いている周囲の環境を示したmp3の音声データ
         ※これら2つの入力データは同時に取得が開始され、タイムスタンプが一致しています。
 
-        # 出力
+        # 出力データの制約
         JSON形式のデータを出力してください。
         モーターの動作ごとに繰り返し出力されます。
         モーターの動作回数は環境に応じて変動します。
@@ -227,12 +226,16 @@ def Gemini(video_path, audio_path, shared_data):
         - このエージェントは、地道に努力を続けるタイプです。継続的に努力し、目標を達成するために必要な過程を大切にします。。
         """
 
+        prompt = """
+        あなたの性格をと添付している映像と音声データをもとに、入力された環境下において動くコプターの動作パターンを生成してください。
+        """
+
         model = genai.GenerativeModel(model_name="gemini-1.5-pro", 
                                       generation_config={"response_mime_type": "application/json"},
-                                      system_instruction = prompt)
+                                      system_instruction = system_instruction)
 
         print("Geminiの応答を待っています...")
-        response = model.generate_content([video_part, audio_part])
+        response = model.generate_content([video_part, audio_part, prompt])
 
         # Geminiからのレスポンスを辞書として格納
         shared_data["gemini_response"] = json.loads(response.text)
@@ -262,15 +265,15 @@ def motor_control(shared_data):
                 for movement in motor_movements:
                     type = movement.get("type")
                     if type == "run_for_degrees":
-                        angle = movement.get("angle")
-                        speed = movement.get("speed")
+                        angle = int(movement.get("angle"))
+                        speed = int(movement.get("speed"))
                         if speed == 0:
                             print(f"Speed is zero for angle {angle}, skipping")
                             continue
                         motor.run_for_degrees(angle, speed=speed)
                         print(f"Motor moved {angle} degrees at speed {speed}")
                     elif type == "sleep":
-                        second = movement.get("second", 0)
+                        second = float(movement.get("second", 0))
                         print(f"Motor sleeping {second}sec start")
                         time.sleep(second)
                         print(f"Motor sleeping {second}sec completed")
@@ -318,7 +321,7 @@ def main():
 
     # 1回目の録音録画を実行
     last_video_path, last_audio_path = record(duration)
-    print("Gemini done. Response: ", shared_data["gemini_response"])
+    print("Record done.  path: ", last_video_path, last_audio_path)
 
 
     # 2回目の録音録画と1回目のGemini API処理を実行
