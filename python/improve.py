@@ -48,6 +48,7 @@ os.dup2(os.open(os.devnull, os.O_RDWR), 2)
 
 # カメラを初期化（デフォルトカメラ）
 cap = cv2.VideoCapture(0)
+
 if cap.isOpened():
     print("カメラの初期化が完了しました。")
 else:
@@ -148,28 +149,6 @@ def record_video_audio(duration, sample_rate=44100, chunk_size=1024):
         
     except Exception as e:
         print(f"録画・録音エラー: {e}")
-        return None, None
-
-    return video_path, audio_path
-    """
-    録画と録音を並行して実行します。
-    終了後、ビデオとオーディオの保存パスを返します。
-    """
-    try:
-        result_list = []
-
-        # 録音処理を別スレッドで実行
-        audio_thread = threading.Thread(target=record_audio, args=(duration, 44100, 1024, result_list))
-
-        audio_thread.start() # 録音開始
-        record_video(duration, result_list) # メインスレッドで録画実行
-        audio_thread.join() # 録音スレッドの終了を待機
-
-        video_path = result_list[0] if len(result_list) > 0 else None
-        audio_path = result_list[1] if len(result_list) > 1 else None
-        
-    except Exception as e:
-        print(f"録画・録音の同時処理エラー: {e}")
         return None, None
 
     return video_path, audio_path
@@ -276,63 +255,6 @@ def upload_and_prompt_video_audio(video_path, audio_path):
             return None
     return response.text
 
-
-    """
-    APIレスポンスからモーターの動作指示を抽出します。
-    この関数では、angle と speed と second を数値型に変換します。
-    """
-    try:
-        # レスポンスをJSON形式で読み込み
-        response_json = json.loads(response_text)
-
-        # モーターの動作指示を抽出
-        motor_movements = response_json.get("motorMovements", [])
-
-        # angle, speed, secondを数値型に変換
-        for movement in motor_movements:
-            if "angle" in movement:
-                movement["angle"] = int(movement["angle"])
-            if "speed" in movement:
-                movement["speed"] = int(movement["speed"])
-            if "second" in movement:
-                movement["second"] = float(movement["second"])
-
-        # その他の解釈情報を抽出
-        interpretation_Vison = response_json.get("interpretation_Vison", "")
-        interpretation_Audio = response_json.get("interpretation_Audio", "")
-        interpretation_Think = response_json.get("interpretation_Think", "")
-
-        return motor_movements, interpretation_Vison, interpretation_Audio, interpretation_Think
-    except (KeyError, ValueError, IndexError, json.JSONDecodeError) as e:
-        print(f"Error extracting motor movements: {e}")
-        return [], "", "", ""
-
-
-    """
-    モーターを指定された角度とスピードで動作させます。
-    """
-    if speed == 0:
-        print(f"Speed is zero for angle {angle}, skipping...")
-        return
-
-    #モーターを動作させる
-    motor.run_for_degrees(angle, speed)
-
-    # 動作結果を出力
-    print(f"Motor moved {angle} degrees at speed {speed}")
-
-
-    """
-    APIの応答内容をログに記録する関数
-    """
-    with open(log_file_path, "a") as log_file:
-        log_file.write(f"\nTime: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        log_file.write(f"Interpretation Vision: {interpretation_Vison}\n")
-        log_file.write(f"Interpretation Audio: {interpretation_Audio}\n")
-        log_file.write(f"Interpretation Think: {interpretation_Think}\n")
-        log_file.write(f"Motor Movements: {motor_movements}\n")
-        log_file.write("\n")
-
 def process_motor_and_log(response_text, video_path, audio_path, current_record_folder):
     """
     Geminiのレスポンスを基にモーターを制御し、動作をログに記録し、ファイルを保存します。
@@ -374,9 +296,6 @@ def process_motor_and_log(response_text, video_path, audio_path, current_record_
                 second = movement["second"]
                 print(f"Motor sleeping {second}sec now ")
                 time.sleep(second)
-
-
-            
 
         # 応答と動作の詳細をログに記録
         log_file_path = os.path.join(current_record_folder, "log.txt")
