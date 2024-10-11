@@ -61,7 +61,7 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 manager = multiprocessing.Manager()
 shared_data = manager.dict() # Manager.dict() を使って共有辞書を作成
 
-def record(duration):
+def record(duration, current_video_folder, current_audio_folder):
     """
     指定された秒数間、カメラで録画を行い、音声を同時に録音します。
     終了後、ビデオとオーディオの保存されたファイルパスを返します。
@@ -69,8 +69,8 @@ def record(duration):
     try:
         # タイムスタンプ付きのファイル名を生成
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        video_path = os.path.join(temp_video_folder, f"temp_Video_{timestamp}.mp4")
-        audio_path = os.path.join(temp_audio_folder, f"temp_mp3_audio_{timestamp}.mp3")
+        temp_video_path = os.path.join(temp_video_folder, f"temp_Video_{timestamp}.mp4")
+        temp_audio_path = os.path.join(temp_audio_folder, f"temp_mp3_audio_{timestamp}.mp3")
         temp_wav_path = os.path.join(temp_audio_folder, f"temp_wav_audio_{timestamp}.wav")
 
         sample_rate = 44100
@@ -78,7 +78,7 @@ def record(duration):
 
         # 録画の設定 (FourCC形式とフレームレートを指定)
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        output = cv2.VideoWriter(video_path, fourcc, 1.0, (640, 480))
+        output = cv2.VideoWriter(temp_video_path, fourcc, 1.0, (640, 480))
 
         # ビデオライターが開けない場合のエラーハンドリング
         if not output.isOpened():
@@ -139,17 +139,22 @@ def record(duration):
         audio = audio + 12
 
         # WAVファイルをMP3に変換して保存
-        audio.export(audio_path, format="mp3")
+        audio.export(temp_audio_path, format="mp3")
 
         # 一時的なWAVファイルを削除
         os.remove(temp_wav_path)
+
+        # 動画と音声ファイルをログフォルダに移動
+        final_video_path = os.path.join(current_video_folder, f"Video_{timestamp}.mp4")
+        final_audio_path = os.path.join(current_audio_folder, f"Audio_{timestamp}.mp3")
+        os.rename(temp_video_path, final_video_path)
+        os.rename(temp_audio_path, final_audio_path)
 
     except Exception as e:
         print(f"録画・録音エラー: {e}")
         return None, None
 
-    return video_path, audio_path
-
+    return final_video_path, final_audio_path
 def Gemini(video_path, audio_path, shared_data):
     """
     録画されたビデオファイルと録音されたオーディオファイルをGeminiにアップロードし、
@@ -235,7 +240,7 @@ def Gemini(video_path, audio_path, shared_data):
                                       system_instruction = system_instruction)
 
         print("Geminiの応答を待っています...")
-        response = model.generate_content([video_part, audio_part, prompt])
+        response = model.generate_content([video_part, audio_part,prompt])
 
         # Geminiからのレスポンスを辞書として格納
         shared_data["gemini_response"] = json.loads(response.text)
@@ -310,24 +315,29 @@ def log(base_timestamp, current_record_folder, response_data):
 def main():
     base_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     current_record_folder = os.path.join(record_save_folder, base_timestamp)
-    os.makedirs(current_record_folder, exist_ok=True)
+    current_video_folder = os.path.join(current_record_folder, "Video")
+    current_audio_folder = os.path.join(current_record_folder, "Audio")
+    os.makedirs(current_video_folder, exist_ok=True)
+    os.makedirs(current_audio_folder, exist_ok=True)
 
     #録画録音時間の設定
-    duration = 5
+    duration = 30
+    
     motor_thread = threading.Thread(target=motor_control, args=(shared_data,))
     motor_thread.daemon = True
     motor_thread.start()
 
 
     # 1回目の録音録画を実行
-    last_video_path, last_audio_path = record(duration)
+    last_video_path, last_audio_path = record(duration, current_video_folder, current_audio_folder)
     print("Record done.  path: ", last_video_path, last_audio_path)
 
 
     # 2回目の録音録画と1回目のGemini API処理を実行
     gemini_process = multiprocessing.Process(target=Gemini, args=(last_video_path, last_audio_path, shared_data))
     gemini_process.start()
-    last_video_path, last_audio_path = record(duration)
+    last_video_path, last_audio_path = record(duration, current_video_folder, current_audio_folder)
+
     gemini_process.join()
 
     print("Gemini done. Response: ", shared_data["gemini_response"])
@@ -342,7 +352,8 @@ def main():
             log_process.start()
             gemini_process = multiprocessing.Process(target=Gemini, args=(last_video_path, last_audio_path, shared_data))
             gemini_process.start()
-            last_video_path, last_audio_path = record(duration)
+            last_video_path, last_audio_path = record(duration, current_video_folder, current_audio_folder)
+
 
             log_process.join()
             gemini_process.join()
